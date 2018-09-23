@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <stdarg.h>
 #include <term.h>
 #include <sys/ioctl.h>
 #include <termios.h>
@@ -29,6 +30,28 @@
 /* local variable                                                               */
 /* **************************************************************************** */
 
+int PRINT(const char *format, ...)
+{
+	va_list arg;
+	int done;
+
+	va_start (arg, format);
+	done = vfprintf (stdout, format, arg);
+	va_end (arg);
+	return done;
+}
+
+int ERR(const char *format, ...)
+{
+	va_list arg;
+	int done;
+
+	va_start (arg, format);
+	done = vfprintf (stderr, format, arg);
+	va_end (arg);
+	return done;
+}
+
 void print_newline(void)
 {
 	printf("\r\n");
@@ -48,6 +71,11 @@ void print_str(char *str)
 char read_c(void)
 {
 	return getchar();
+}
+
+void os_wait(int ms)
+{
+	usleep(ms * 1000);
 }
 
 int BTerm_Start(void)

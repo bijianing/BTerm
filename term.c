@@ -16,9 +16,18 @@
 		for (i2 = 0, cmd = &g_cmds[i1].tab[i2]; i2 < g_cmds[j].size; i2++, cmd = &g_cmds[i1].tab[i2]) 
 
 
-#define STR_NL				"\r\n"
 #define STR_PROM			"\x1B[31;1m>\x1B[0m "
 
+#define KEY_CTRL_A			(0x01)
+#define KEY_CTRL_B			(0x02)
+#define KEY_CTRL_C			(0x03)
+#define KEY_CTRL_D			(0x04)
+#define KEY_CTRL_E			(0x05)
+#define KEY_CTRL_F			(0x06)
+#define KEY_CTRL_K			(0x0b)
+#define KEY_CTRL_Y			(0x19)
+
+#define KEY_DEL				(0x7f)
 /* **************************************************************************** */
 /* enum                                                                         */
 /* **************************************************************************** */
@@ -51,23 +60,22 @@ SIMP_TERM_CMDHDL_DEFINE(help);
 SIMP_TERM_CMDHDL_DEFINE(hist);
 SIMP_TERM_CMDHDL_DEFINE(dbg);
 
-static int history_cnt(void);
-static int history_next_idx(void);
-static int history_prev_idx(void);
-static int history_start_idx(void);
 
+static int history_cnt(void);
+static int history_start_idx(void);
 static int move_left(int n);
 static int move_right(int n);
 
 /* **************************************************************************** */
 /* local variable                                                               */
 /* **************************************************************************** */
-static char ch;			// current character
-static char buf[UART_BUFSZ];	// buffer of command line
-static int i = 0;		// current index of buffer
-static int len = 0;		// length of current command
-static int ctrl = 0;		// control seqency flag
-static int printing_cand = 0;	// printing candicate flag
+static char ch;				// current character
+static char buf[UART_BUFSZ];		// buffer of command line
+static char buf_copy[UART_BUFSZ];	// buffer for copy
+static int i = 0;			// current index of buffer
+static int len = 0;			// length of current command
+static int ctrl = 0;			// control seqency flag
+static int printing_cand = 0;		// printing candicate flag
 static int g_ret;
 
 BTermCmdHist_t		hist = { 0 };
@@ -136,6 +144,11 @@ SIMP_TERM_CMDHDL_DEFINE(dbg)
 /* funcitons for implementation                                                 */
 /* **************************************************************************** */
 
+static void move_left_force(int n)
+{
+	PRINT("\x1b[%dD", n);
+}
+
 static int move_right(int n)
 {
 	//DBG("i:%d, len:%d, n:%d\r\n", i, len, n);
@@ -150,7 +163,6 @@ static int move_right(int n)
 
 static int move_left(int n)
 {
-	//DBG("i:%d, len:%d, n:%d\r\n", i, len, n);
 	if (n == 0 || i == 0) return 0;
 
 	if (n > i) n = i;
@@ -162,7 +174,7 @@ static int move_left(int n)
 
 static void move_sub_buf(int to, int from)
 {
-	int j, head, offset, movlen;
+	int j, head, offset, movlen, dir;
 
 	if (from == len)
 		return;
@@ -170,19 +182,20 @@ static void move_sub_buf(int to, int from)
 	if (from == to)
 		return;
 
+	movlen = strlen(buf + from);
 	if (from > to) {
-		movlen = len - from;
 		head = to;
-		offset = 1;
+		offset = from - to;
+		dir = 1;
 	} else {
-		movlen = len - from;
-		head = len + to - from - 1;
-		offset = -1;
+		offset = to - from;
+		head = len + offset - 1;
+		dir = -1;
 	}
-//	DBG("head:%d, len:%d, off:%d\r\n", head, movlen, offset);
+	//DBG("from:%d, to:%d, head:%d, len:%d, off:%d\r\n", from, to, head, movlen, offset);
 	for (j = 0; j < movlen; j++) {
-		buf[head] = buf[head + offset];
-		head += offset;
+		buf[head] = buf[head + (dir * offset)];
+		head += dir;
 	}
 }
 
@@ -198,10 +211,10 @@ static void print_buf_c(char c)
 	i++;
 	len++;
 
-//	DBG("i:%d, len:%d, buf:%s\r\n", i, len, buf);
+//	DBG("i:%d, len:%d, buf:%s, PRINTED_STR:%s\r\n", i, len, buf, buf + i);
 	if (i < len) {
 		PRINT("%s", buf + i);
-		move_left(len - i);
+		move_left_force(len - i);
 	}
 }
 
@@ -212,6 +225,7 @@ static void print_buf_str(char *str)
 	if (slen <= 0)
 		return;
 
+	//DBG("buf:%s, slen:%d, str:%s, i:%d, len:%d\r\n", buf, slen, str, i, len);
 	print_str(str);
 
 	/* move chars behind i */
@@ -223,7 +237,7 @@ static void print_buf_str(char *str)
 
 	if (i < len) {
 		PRINT("%s", buf + i);
-		move_left(len - i);
+		move_left_force(len - i);
 	}
 }
 
@@ -258,6 +272,8 @@ static void delete_n_right(int n)
 	
 	for (j = 0; j < len - i; j++)
 		PRINT("\b");
+
+	move_sub_buf(i, i + n);
 }
 
 static void delete_n(int n)
@@ -295,6 +311,20 @@ static void delete_all(void)
 	delete_n(-len);
 
 	i = len = 0;
+}
+
+static void kill_buf_from_i(void)
+{
+	int clen = len - i;
+	memcpy(buf_copy, buf + i, clen);
+	buf_copy[clen] = 0;
+
+	delete_n(-clen);
+}
+
+static void paste_buf(void)
+{
+	print_buf_str(buf_copy);
 }
 
 static int history_cnt(void)
@@ -535,13 +565,43 @@ static int process_char_normal(void)
 		break;
 		
 	case '\b':
-	case 0x7F: /* DEL */
+	case KEY_DEL:
 		delete_n(1);
 		break;
 		
 	case '\t':
 		buf[len] = 0;
 		autocomplete();
+		break;
+		
+	case KEY_CTRL_A:
+		i -= move_left(i);
+		break;
+		
+	case KEY_CTRL_B:
+		i -= move_left(1);
+		break;
+		
+	case KEY_CTRL_C:
+		break;
+		
+	case KEY_CTRL_D:
+		break;
+		
+	case KEY_CTRL_E:
+		i += move_right(len - i);
+		break;
+		
+	case KEY_CTRL_F:
+		i += move_right(1);
+		break;
+		
+	case KEY_CTRL_K:
+		kill_buf_from_i();
+		break;
+		
+	case KEY_CTRL_Y:
+		paste_buf();
 		break;
 		
 	default:
@@ -590,7 +650,7 @@ static int read_ip(const char *name, unsigned long *result)
 	n = sscanf(buf, "%lu.%lu.%lu.%lu", &a, &b, &c, &d);
 	if (n != 4)
 	{
-		INF("ip format error:%s\n", buf);
+		PRINT("ip format error:%s\n", buf);
 		return 1;
 	}
 	
@@ -607,7 +667,7 @@ static int read_int(const char *name, int *result)
 	n = sscanf(buf, "%d", result);
 	if (n != 1)
 	{
-		INF("read int format error\n");
+		PRINT("read int format error\n");
 		return 1;
 	}
 	return 0;
@@ -621,7 +681,7 @@ static int read_str(const char *name, char *result, int sz)
 	n = readline();
 	if (n <= 1)
 	{
-		INF("read str format error\n");
+		PRINT("read str format error\n");
 		return 1;
 	}
 	
@@ -641,7 +701,7 @@ static void print_ip(int ip)
 	b = (ip & 0xFF0000) >> 16;
 	a = (ip & 0xFF000000) >> 24;
 
-	INF("%d.%d.%d.%d", a, b, c, d);
+	PRINT("%d.%d.%d.%d", a, b, c, d);
 }
 #endif
 

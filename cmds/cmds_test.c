@@ -44,8 +44,13 @@ BTermCmd_t cmd_test[] =
 
 SIMP_TERM_CMDHDL_DEFINE(cmd1)
 {
+	int i;
 	
-	printf("cmd1\n");
+	PRINT("Show all args, argc:%d%s", argc, STR_NL);
+	for (i = 0; i < argc; i++) {
+		PRINT("arg%-2d:%s%s", i, argv[i], STR_NL);
+	}
+
 	return 0;
 }
 
