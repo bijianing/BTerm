@@ -41,7 +41,7 @@ int PRINT(const char *format, ...)
 	return done;
 }
 
-int ERR(const char *format, ...)
+int PRINT_ERR(const char *format, ...)
 {
 	va_list arg;
 	int done;

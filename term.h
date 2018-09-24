@@ -11,14 +11,20 @@
 
 #if	__DBG
 #define DBG(f, x...) \
-	ERR("Term: %-8d, %s(): " f, __LINE__, __FUNCTION__,## x)
+	PRINT_ERR("Term: %-8d, %s(): " f, __LINE__, __FUNCTION__,## x)
 #else
 #define DBG(f, x...) 
 #endif
 
+#define ERR(f, x...) \
+	PRINT_ERR("Term: %-8d, %s(): " f, __LINE__, __FUNCTION__,## x)
+
 #define IP(d,c,b,a)			((a << 0) | (b << 8) | (c << 16) | (d << 24))
-#define UART_BUFSZ			64
+#define BUFSZ				64
 #define HISTORY_MAX			32
+#define VAR_MAX				32
+#define VAR_NMSZ			16
+#define VAR_VALSZ			32
 #define ARYSIZ(a)		(sizeof(a) / sizeof(a[0]))
 
 #define SIMP_TERM_CMDTAB_ENTRY(cmd, help) {cmd_hdl_ ## cmd, #cmd, help}
@@ -50,7 +56,7 @@ typedef struct BTermCmd_str
 
 /* implement in os specific */
 int PRINT(const char *format, ...);
-int ERR(const char *format, ...);
+int PRINT_ERR(const char *format, ...);
 void print_newline(void);
 void print_c(char c);
 void print_str(char *str);
