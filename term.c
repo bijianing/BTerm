@@ -31,6 +31,15 @@
 /* **************************************************************************** */
 /* enum                                                                         */
 /* **************************************************************************** */
+typedef enum BTermExpandStat
+{
+	BTS_Normal,
+	BTS_Quote,
+	BTS_DoubleQuote,
+	BTS_Finding,
+	BTS_Expanding,
+} BTermExpandStat_t;
+
 /* **************************************************************************** */
 /* data                                                                         */
 /* **************************************************************************** */
@@ -755,6 +764,17 @@ static int is_space(char c)
 	return 0;
 }
 
+static int is_special(char c)
+{
+	if (is_space(c))
+		return 1;
+
+	if (c == '\'' || c == '\"')
+		return 1;
+
+	return 0;
+}
+
 static int set_var(void)
 {
 	int i, q = 0;
@@ -795,12 +815,76 @@ static int set_var(void)
 	return 1;
 }
 
-static void expand_var(void)
+static int expand_var(int start)
 {
-	int i, j;
+	int i, j, found = 0, q = 0;
+	BTermExpandStat_t stat = BTS_Normal;
+	char name[VAR_NMSZ];
+	int name_starti, name_endi;
+	int var_starti, var_endi;
+	char *value;
 
-	for (i = 0; i < BUFSZ; i++) {
-		
+	for (i = start; i < len; i++) {
+		switch (stat) {
+		case BTS_Normal:
+			if (buf[i] == '$') {
+				stat = BTS_Finding;
+				var_starti = i;
+			}
+			break;
+
+		/* find next signle quote */
+		case BTS_Quote:
+			for (; i < len && buf[i] != '\''; i++);
+
+			if (i >= len) return 0;
+
+			stat = BTS_Normal;
+
+			break;
+
+		case BTS_Finding:
+			if (buf[i] == '{') {
+				q = 1;
+				i++;
+			} else {
+				q = 0;
+			}
+
+			name_starti = i;
+			for (j = i; j < len && !is_special(buf[j]); j++) {
+				if (buf[j] == '}') {
+					if (q == 1) {
+						name_endi = j - 1;
+						var_endi = j;
+						stat = BTS_Expanding;
+						continue;
+					} else {
+						ERR("Expanding Variable ERROR, buf:%s, index:%d\r\n",
+								buf, var_starti);
+						return 0;
+					}
+				}
+			}
+
+			if (q == 1) {
+				ERR("Expanding Variable ERROR, "
+					"Cannot find ending \'}\'. buf:%s, index:%d\r\n",
+					buf, var_starti);
+				return 0;
+			}
+
+			name_endi = var_endi = j - 1;
+			stat = BTS_Expanding;
+			break;
+
+		case BTS_Expanding:
+			memncpy(name, buf + name_starti, name_endi - name_starti + 1);
+			name[name_endi - name_starti + 1] = 0;
+
+			value = var_val(name);
+		}
+			
 	}
 }
 
