@@ -68,6 +68,7 @@ SIMP_TERM_CMDHDL_DEFINE(exit);
 SIMP_TERM_CMDHDL_DEFINE(help);
 SIMP_TERM_CMDHDL_DEFINE(hist);
 SIMP_TERM_CMDHDL_DEFINE(var);
+SIMP_TERM_CMDHDL_DEFINE(echo);
 SIMP_TERM_CMDHDL_DEFINE(dbg);
 
 
@@ -101,6 +102,7 @@ BTermCmd_t cmd_basic[] =
 	SIMP_TERM_CMDTAB_ENTRY(help,		"show help information"),
 	SIMP_TERM_CMDTAB_ENTRY(hist,		"show history commands"),
 	SIMP_TERM_CMDTAB_ENTRY(var,		"show all variables"),
+	SIMP_TERM_CMDTAB_ENTRY(echo,		"echo all args"),
 	SIMP_TERM_CMDTAB_ENTRY(dbg,		"for debug"),
 };
 
@@ -168,7 +170,15 @@ SIMP_TERM_CMDHDL_DEFINE(var)
 	return 0;
 }
 
-
+SIMP_TERM_CMDHDL_DEFINE(echo)
+{
+	int i;
+	DBG("argc:%d\r\n", argc);
+	for (i = 1; i < argc; i++) {
+		PRINT("%s ", argv[i]);
+	}
+	print_newline();
+}
 
 
 /* **************************************************************************** */
@@ -213,6 +223,7 @@ static void move_sub_buf(int to, int from)
 	if (from == to)
 		return;
 
+//	DBG("buf:%s, i:%d, len:%d, from:%d, to:%d\r\n", buf, idx, len, from, to);
 	movlen = strlen(buf + from);
 	if (from > to) {
 		head = to;
@@ -223,11 +234,13 @@ static void move_sub_buf(int to, int from)
 		head = len + offset - 1;
 		dir = -1;
 	}
-	//DBG("from:%d, to:%d, head:%d, len:%d, off:%d\r\n", from, to, head, movlen, offset);
+//	DBG("from:%d, to:%d, head:%d, len:%d, off:%d, dir:%d\r\n", from, to, head, movlen, offset, dir);
 	for (i = 0; i < movlen; i++) {
 		buf[head] = buf[head + (dir * offset)];
 		head += dir;
 	}
+	buf[head] = 0;
+//	DBG("buf:%s, i:%d, len:%d, from:%d, to:%d\r\n", buf, idx, len, from, to);
 }
 
 static void print_buf_c(char c)
@@ -739,7 +752,9 @@ static int var_index(char *var)
 {
 	int i, j;
 
-	for (i = 0; i < VAR_MAX; i++) {
+	DBG("a\r\n");
+	for (i = 0; i < g_var_cnt; i++) {
+		DBG("i:%d, var:%p, nm:%p\r\n", i, var, g_var_nm[i]);
 		if (!strncmp(var, g_var_nm[i], VAR_NMSZ))
 			return i;
 	}
@@ -751,7 +766,9 @@ static char *var_value(char *var)
 {
 	int i = var_index(var);
 
+	DBG("i:%d\r\n", i);
 	if (i < 0) return NULL;
+	DBG("i:%d\r\n", i);
 
 	return g_var_val[i];
 }
@@ -817,7 +834,7 @@ static int set_var(void)
 
 static int expand_var(int start)
 {
-	int i, j, found = 0, q = 0;
+	int i, j, q, varlen;
 	BTermExpandStat_t stat = BTS_Normal;
 	char name[VAR_NMSZ];
 	int name_starti, name_endi;
@@ -852,13 +869,14 @@ static int expand_var(int start)
 			}
 
 			name_starti = i;
+			//DBG("i:%d, len:%d, buf:%s\r\n", i, len, buf);
 			for (j = i; j < len && !is_special(buf[j]); j++) {
 				if (buf[j] == '}') {
 					if (q == 1) {
 						name_endi = j - 1;
 						var_endi = j;
 						stat = BTS_Expanding;
-						continue;
+						break;
 					} else {
 						ERR("Expanding Variable ERROR, buf:%s, index:%d\r\n",
 								buf, var_starti);
@@ -866,11 +884,12 @@ static int expand_var(int start)
 					}
 				}
 			}
+			if (stat == BTS_Expanding) break;
 
 			if (q == 1) {
 				ERR("Expanding Variable ERROR, "
-					"Cannot find ending \'}\'. buf:%s, index:%d\r\n",
-					buf, var_starti);
+					"Cannot find ending \'}\'. buf:%s, starti:%d, endi:%d\r\n",
+					buf, var_starti, j);
 				return 0;
 			}
 
@@ -879,13 +898,26 @@ static int expand_var(int start)
 			break;
 
 		case BTS_Expanding:
-			memncpy(name, buf + name_starti, name_endi - name_starti + 1);
+			memcpy(name, buf + name_starti, name_endi - name_starti + 1);
+			DBG("a\r\n");
 			name[name_endi - name_starti + 1] = 0;
 
-			value = var_val(name);
+			value = var_value(name);
+			if (value) {
+				varlen = strlen(value);
+				strcpy(buf + var_starti, value);
+			} else {
+				varlen = 0;
+			}
+
+			move_sub_buf(var_starti + varlen, var_endi + 1);
+			DBG("expand over!, buf:%s, var:%s, move sbu buf %d to %d\r\n",
+					buf, value, var_endi + 1, var_starti + varlen);
+			return 1;
 		}
-			
 	}
+
+	return 0;
 }
 
 static void split_with_space(char *str, int *argc, char **argv)
@@ -970,6 +1002,8 @@ void BTerm_Main(int p)
 		if (n <= 0) continue;
 
 		if (set_var()) continue;
+
+		while(expand_var(0));
 		
 		split_with_space(buf, &argc, argv);
 //		for (k = 0; k < argc; k++)
