@@ -112,6 +112,7 @@ BTermCmd_t cmd_basic[] =
 /* **************************************************************************** */
 SIMP_TERM_CMDHDL_DEFINE(exit)
 {
+	print_newline();
 	BTerm_Stop();
 	
 	return 0;
@@ -630,6 +631,8 @@ static int process_char_normal(void)
 		break;
 		
 	case KEY_CTRL_D:
+		print_newline();
+		BTerm_Stop();
 		break;
 		
 	case KEY_CTRL_E:
@@ -786,7 +789,7 @@ static int is_special(char c)
 	if (is_space(c))
 		return 1;
 
-	if (c == '\'' || c == '\"')
+	if (c == '\'' || c == '\"' || c == 0)
 		return 1;
 
 	return 0;
@@ -841,9 +844,10 @@ static int expand_var(int start)
 	int var_starti, var_endi;
 	char *value;
 
-	for (i = start; i < len; i++) {
+	for (i = start; i < BUFSZ; i++) {
 		switch (stat) {
 		case BTS_Normal:
+			if (buf[i] == 0) return 0;
 			if (buf[i] == '$') {
 				stat = BTS_Finding;
 				var_starti = i;
@@ -852,6 +856,10 @@ static int expand_var(int start)
 
 		/* find next signle quote */
 		case BTS_Quote:
+			if (buf[i] == 0) {
+				ERR("Not found ending quote\r\n");
+				return 0;
+			}
 			for (; i < len && buf[i] != '\''; i++);
 
 			if (i >= len) return 0;
@@ -869,7 +877,6 @@ static int expand_var(int start)
 			}
 
 			name_starti = i;
-			//DBG("i:%d, len:%d, buf:%s\r\n", i, len, buf);
 			for (j = i; j < len && !is_special(buf[j]); j++) {
 				if (buf[j] == '}') {
 					if (q == 1) {
@@ -893,13 +900,14 @@ static int expand_var(int start)
 				return 0;
 			}
 
+			DBG("i:%d, len:%d, buf:%s, j:%d\r\n", i, len, buf, j);
 			name_endi = var_endi = j - 1;
 			stat = BTS_Expanding;
 			break;
 
 		case BTS_Expanding:
 			memcpy(name, buf + name_starti, name_endi - name_starti + 1);
-			DBG("a\r\n");
+			DBG("name start:%d, end:%d, var start:%d, end:%d\r\n", name_starti, name_endi, var_starti, var_endi);
 			name[name_endi - name_starti + 1] = 0;
 
 			value = var_value(name);
@@ -998,8 +1006,8 @@ void BTerm_Main(int p)
 	while (1)
 	{
 		PRINT(STR_PROM);
-		n = readline();
-		if (n <= 0) continue;
+		readline();
+		if (len <= 0) continue;
 
 		if (set_var()) continue;
 
