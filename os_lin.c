@@ -14,6 +14,7 @@
 /* **************************************************************************** */
 /* define                                                                       */
 /* **************************************************************************** */
+#define SPBUFSZ			512
 /* **************************************************************************** */
 /* enum                                                                         */
 /* **************************************************************************** */
@@ -29,6 +30,7 @@
 /* **************************************************************************** */
 /* local variable                                                               */
 /* **************************************************************************** */
+static char stty_param[SPBUFSZ];
 
 int PRINT(const char *format, ...)
 {
@@ -80,6 +82,10 @@ void os_wait(int ms)
 
 int BTerm_Start(void)
 {
+	FILE *fp;
+	char buf[SPBUFSZ];
+	int idx = 0, len;
+	char *p;
 	struct termios io_conf;
 	tcgetattr(0, &io_conf);
 
@@ -89,7 +95,37 @@ int BTerm_Start(void)
 	io_conf.c_cc[VTIME] = 1;
 	tcsetattr( 0 , TCSAFLUSH , &io_conf );
 
+	fp = popen("stty", "r");
+
+	p = stty_param;
+	memset(p, 0, SPBUFSZ);
+	if(!fp){
+		fprintf(stderr, "Could not open pipe for output.\n");
+		return 1;
+	}
+
+	while (fgets(buf, SPBUFSZ , fp)) {
+		len = strlen(buf);
+		if (buf[len - 1] == '\n') {
+			buf[len - 1] = 0;
+			len--;
+		}
+		printf("got stty param:%s, len:%d\n", buf, len);
+		if (p + len + 1 > stty_param + SPBUFSZ) {
+			fprintf(stderr, "buffer size (%d) is too small\n", SPBUFSZ);
+			goto err;
+		}
+		memcpy(p, buf, len);
+		p[len] = ' ';
+		p += (len + 1);
+	}
+
 	system ("stty raw");
+
+err:
+	if (pclose(fp) != 0) {
+		fprintf(stderr," Error: Failed to close command stream \n");
+	}
 
 	BTerm_Main(0);
 
@@ -98,7 +134,9 @@ int BTerm_Start(void)
 
 int BTerm_Stop(void)
 {
-	system ("stty 4500:5:bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
+	char cmd[SPBUFSZ];
+	snprintf(cmd, "stty %s", stty_param);
+	system(cmd);
 	exit(0);
 
 	return 0;

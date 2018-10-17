@@ -554,7 +554,7 @@ static void autocomplete(void)
 				break;
 		}
 	}
-
+#if 0
 	prefix = find_same_prefix(fcmds, cnt);
 				print_complete_cand(cmd);
 	/* only one candicate */
@@ -564,6 +564,7 @@ static void autocomplete(void)
 	} else if (cnt > 1) {
 		print_complete_cand_end();
 	}
+#endif
 }
 
 void process_char_ctrl(void)
