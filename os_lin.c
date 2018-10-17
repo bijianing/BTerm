@@ -84,7 +84,7 @@ int BTerm_Start(void)
 {
 	FILE *fp;
 	char buf[SPBUFSZ];
-	int idx = 0, len;
+	int len;
 	char *p;
 	struct termios io_conf;
 	tcgetattr(0, &io_conf);
@@ -95,7 +95,7 @@ int BTerm_Start(void)
 	io_conf.c_cc[VTIME] = 1;
 	tcsetattr( 0 , TCSAFLUSH , &io_conf );
 
-	fp = popen("stty", "r");
+	fp = popen("stty -g", "r");
 
 	p = stty_param;
 	memset(p, 0, SPBUFSZ);
@@ -110,7 +110,7 @@ int BTerm_Start(void)
 			buf[len - 1] = 0;
 			len--;
 		}
-		printf("got stty param:%s, len:%d\n", buf, len);
+		//printf("got stty param:%s, len:%d\n", buf, len);
 		if (p + len + 1 > stty_param + SPBUFSZ) {
 			fprintf(stderr, "buffer size (%d) is too small\n", SPBUFSZ);
 			goto err;
@@ -120,7 +120,7 @@ int BTerm_Start(void)
 		p += (len + 1);
 	}
 
-	system ("stty raw");
+	system ("stty raw -echo");
 
 err:
 	if (pclose(fp) != 0) {
@@ -135,7 +135,8 @@ err:
 int BTerm_Stop(void)
 {
 	char cmd[SPBUFSZ];
-	snprintf(cmd, "stty %s", stty_param);
+	sprintf(cmd, "stty %s", stty_param);
+	//printf("restore stty cmd:%s\n", cmd);
 	system(cmd);
 	exit(0);
 

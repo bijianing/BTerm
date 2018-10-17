@@ -36,7 +36,6 @@ typedef enum BTermExpandStat
 {
 	BTS_Normal,
 	BTS_Quote,
-	BTS_DoubleQuote,
 	BTS_Finding,
 	BTS_Expanding,
 } BTermExpandStat_t;
@@ -87,7 +86,6 @@ static char buf_copy[BUFSZ];		// buffer for copy
 static int idx = 0;			// current index of buffer
 static int len = 0;			// length of current command
 static int ctrl = 0;			// control seqency flag
-static int printing_cand = 0;		// printing candicate flag
 static int g_ret;			// return val of last command
 static int g_var_cnt;			// variable count
 static char g_var_nm[VAR_MAX][VAR_NMSZ];	// variable name
@@ -95,7 +93,7 @@ static char g_var_val[VAR_MAX][VAR_VALSZ];	// variable value
 
 BTermCmdHist_t		hist = { 0 };
 
-static BTermCmdTab_t g_cmds[CMD_TAB_MAX] = { NULL };
+static BTermCmdTab_t g_cmds[CMD_TAB_MAX] = { 0 };
 
 BTermCmd_t cmd_basic[] =
 {
@@ -158,7 +156,7 @@ SIMP_TERM_CMDHDL_DEFINE(dbg)
 
 SIMP_TERM_CMDHDL_DEFINE(var)
 {
-	int i, j;
+	int i;
 
 	if (g_var_cnt == 0) {
 		PRINT("No Variable%s", STR_NL);
@@ -180,6 +178,8 @@ SIMP_TERM_CMDHDL_DEFINE(echo)
 		PRINT("%s ", argv[i]);
 	}
 	print_newline();
+
+	return 0;
 }
 
 
@@ -502,27 +502,15 @@ static void process_key_delete(void)
 	delete_n(-1);
 }
 
-static void print_complete_cand(BTermCmd_t *cmd)
-{
-	if(printing_cand) {
-		PRINT("%s%s", STR_NL, cmd->name);
-	} else {
-		printing_cand = 1;
-		PRINT("%s%s", STR_NL, cmd->name);
-	}
-}
-
 static int find_same_prefix(char **cmdstr, int size)
 {
-	int ret, i, j;
+	int i, j;
 
 	for(i = 0; i < BUFSZ; i++) {
-		if (buf[i] == 0)
-			break;
 		for(j = 0; j < size; j++) {
 			if (!cmdstr[j] ||
 				cmdstr[j][i] == 0 ||
-				cmdstr[j][i] != buf[i])
+				cmdstr[j][i] != cmdstr[0][i])
 			break;
 		}
 
@@ -531,12 +519,6 @@ static int find_same_prefix(char **cmdstr, int size)
 	}
 
 	return i;
-}
-
-static void print_complete_cand_end(void)
-{
-	printing_cand = 0;
-	PRINT("%s%s", STR_NL STR_PROM, buf);
 }
 
 static void autocomplete(void)
@@ -554,17 +536,24 @@ static void autocomplete(void)
 				break;
 		}
 	}
-#if 0
+	if (cnt <= 0)
+		return;
 	prefix = find_same_prefix(fcmds, cnt);
-				print_complete_cand(cmd);
+
 	/* only one candicate */
 	if (cnt == 1) {
 		delete_all();
-		print_buf_str(found_cmd->name);
+		print_buf_str(fcmds[0]);
 	} else if (cnt > 1) {
-		print_complete_cand_end();
+		for (i = 0; i < cnt; i++) {
+			PRINT("%s%s", STR_NL, fcmds[i]);
+		}
+		idx = len = prefix;
+		memcpy(buf, fcmds[0], len);
+		buf[len] = 0;
+
+		PRINT("%s%s", STR_NL STR_PROM, buf);
 	}
-#endif
 }
 
 void process_char_ctrl(void)
@@ -768,7 +757,7 @@ static void print_ip(int ip)
 #endif
 static int var_index(char *var)
 {
-	int i, j;
+	int i;
 
 	DBG("a\r\n");
 	for (i = 0; i < g_var_cnt; i++) {
@@ -812,8 +801,8 @@ static int is_special(char c)
 
 static int set_var(void)
 {
-	int i, q = 0;
-	char c, name[VAR_NMSZ];
+	int i;
+	char name[VAR_NMSZ];
 	int namei, vali, var_idx;
 
 	/* skip space */
@@ -1009,7 +998,7 @@ static int BTerm_DoCmd(BTermCmd_t *cmd, int argc, char **argv)
 void BTerm_Main(int p)
 {
 	int argc;
-	int n, i, j, found;
+	int i, j, found;
 	BTermCmd_t *cmd;
 	char *argv[ARG_MAX];
 	
