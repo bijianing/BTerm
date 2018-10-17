@@ -89,7 +89,7 @@ int BTerm_Start(void)
 	io_conf.c_cc[VTIME] = 1;
 	tcsetattr( 0 , TCSAFLUSH , &io_conf );
 
-	system ("/bin/stty raw");
+	system ("stty raw");
 
 	BTerm_Main(0);
 
@@ -98,7 +98,7 @@ int BTerm_Start(void)
 
 int BTerm_Stop(void)
 {
-	system ("/bin/stty 4500:5:bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
+	system ("stty 4500:5:bf:8a3b:3:1c:7f:15:4:0:1:0:11:13:1a:0:12:f:17:16:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0:0");
 	exit(0);
 
 	return 0;

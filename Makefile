@@ -1,8 +1,9 @@
 CFLAGS=-I.  -g -Wall
 
-bterm: term.c term.h os_lin.c cmds/cmds_test.c
+SRC=term.c os_lin.c cmds/cmds_test.c
+bterm: $(SRC) term.h
 	@echo CC $@
-	@gcc ${CFLAGS} $^ -o $@
+	@gcc ${CFLAGS} $(SRC) -o $@
 
 clean:
 	@echo CLEAN

@@ -11,6 +11,7 @@
 /* **************************************************************************** */
 #define ARG_MAX				(10)
 #define CMD_TAB_MAX			(10)
+#define CMD_AUTO_COMP_MAX		(16)
 #define for_each_cmd(i1, i2, cmd) \
 	for (i1 = 0; i1 < CMD_TAB_MAX && g_cmds[i1].tab != NULL; i1++) \
 		for (i2 = 0, cmd = &g_cmds[i1].tab[i2]; i2 < g_cmds[i].size; i2++, cmd = &g_cmds[i1].tab[i2]) 
@@ -511,6 +512,27 @@ static void print_complete_cand(BTermCmd_t *cmd)
 	}
 }
 
+static int find_same_prefix(char **cmdstr, int size)
+{
+	int ret, i, j;
+
+	for(i = 0; i < BUFSZ; i++) {
+		if (buf[i] == 0)
+			break;
+		for(j = 0; j < size; j++) {
+			if (!cmdstr[j] ||
+				cmdstr[j][i] == 0 ||
+				cmdstr[j][i] != buf[i])
+			break;
+		}
+
+		if (j < size)
+			break;
+	}
+
+	return i;
+}
+
 static void print_complete_cand_end(void)
 {
 	printing_cand = 0;
@@ -519,35 +541,27 @@ static void print_complete_cand_end(void)
 
 static void autocomplete(void)
 {
-	int i, j, found_cnt = 0;
-	BTermCmd_t *cmd, *found_cmd;
+	int i, j, cnt = 0, prefix;
+	BTermCmd_t *cmd;
+	char *fcmds[CMD_AUTO_COMP_MAX];
 
 	for_each_cmd(i, j, cmd) {
 //		DBG("compared \"%s\" and \"%s\", idx:%d, result:%d %s", cmd->name, buf, idx, strncmp(cmd->name, buf, idx + 1), STR_NL);
 		if (!strncmp(cmd->name, buf, len)) {
-			found_cnt++;
+			fcmds[cnt++] = cmd->name;
 
-			/* first time */
-			if (found_cnt == 1) {
-				found_cmd = cmd;
-
-			/* second time */
-			} else if (found_cnt == 2) {
-				print_complete_cand(found_cmd);
-				print_complete_cand(cmd);
-
-			/* more than one cmd found */
-			} else {
-				print_complete_cand(cmd);
-			}
+			if (cnt >= CMD_AUTO_COMP_MAX - 1)
+				break;
 		}
 	}
 
+	prefix = find_same_prefix(fcmds, cnt);
+				print_complete_cand(cmd);
 	/* only one candicate */
-	if (found_cnt == 1) {
+	if (cnt == 1) {
 		delete_all();
 		print_buf_str(found_cmd->name);
-	} else if (found_cnt > 1) {
+	} else if (cnt > 1) {
 		print_complete_cand_end();
 	}
 }
